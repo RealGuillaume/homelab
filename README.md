@@ -196,9 +196,54 @@ home-cluster-mvp/
 4. **Network segmentation**: Consider VLAN isolation for cluster network
 5. **Regular updates**: Keep K3s, MetalLB, and cert-manager updated
 
+## Demo Applications
+
+After setting up your cluster, explore its capabilities with comprehensive demo applications:
+
+### Deploy All Demos
+```bash
+ansible-playbook -i inventories/home/hosts.ini playbooks/demos.yml --become --ask-become-pass
+```
+
+### Available Demos
+- **NGINX LoadBalancer**: Shows MetalLB load balancing with multiple replicas
+- **Browser Games**: 2048 and Tetris games (lightweight containerized apps)
+- **WordPress + MySQL**: Full-stack CMS with persistent storage
+- **Monitoring Stack**: Prometheus metrics + Grafana dashboards
+- **Kubernetes Dashboard**: Web UI for cluster management with RBAC
+
+### Individual Demo Deployment
+```bash
+# Deploy specific demos
+ansible-playbook -i inventories/home/hosts.ini playbooks/demos/nginx-demo.yml --become --ask-become-pass
+ansible-playbook -i inventories/home/hosts.ini playbooks/demos/games-demo.yml --become --ask-become-pass
+ansible-playbook -i inventories/home/hosts.ini playbooks/demos/wordpress-demo.yml --become --ask-become-pass
+ansible-playbook -i inventories/home/hosts.ini playbooks/demos/monitoring-demo.yml --become --ask-become-pass
+ansible-playbook -i inventories/home/hosts.ini playbooks/demos/dashboard-demo.yml --become --ask-become-pass
+```
+
+### Demo Management
+```bash
+# Check status of all demos
+ansible-playbook -i inventories/home/hosts.ini playbooks/demo-status.yml --become --ask-become-pass
+
+# Clean up all demos
+ansible-playbook -i inventories/home/hosts.ini playbooks/demo-cleanup.yml --become --ask-become-pass
+```
+
+### What the Demos Prove
+1. **Production-Ready**: K3s handles real applications like WordPress
+2. **Scalable**: Load balancing across multiple pod replicas
+3. **Persistent**: Data survives pod restarts with local-path storage
+4. **Secure**: RBAC, secrets, and TLS certificate management
+5. **Observable**: Monitoring with Prometheus and Grafana
+6. **Enterprise Features**: Everything expected from full Kubernetes
+
+Your single-node K3s cluster demonstrates the same capabilities as enterprise Kubernetes distributions!
+
 ## Next Steps
 
-- Add monitoring (Prometheus + Grafana)
+- Add monitoring (built into demos above)
 - Configure persistent storage (NFS, Longhorn, or Rook-Ceph)
 - Set up GitOps with ArgoCD or Flux
 - Add backup solution (Velero)

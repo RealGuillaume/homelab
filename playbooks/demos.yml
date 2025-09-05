@@ -1,0 +1,39 @@
+---
+- name: Deploy All K3s Demo Applications
+  hosts: k3s_server
+  become: yes
+  gather_facts: no
+  tasks:
+    - name: Deploy NGINX LoadBalancer Demo
+      include_tasks: demos/nginx-demo.yml
+      tags: [nginx, demos]
+
+    - name: Deploy Games Demo (2048 & Tetris)
+      include_tasks: demos/games-demo.yml
+      tags: [games, demos]
+
+    - name: Deploy WordPress with MySQL Demo
+      include_tasks: demos/wordpress-demo.yml
+      tags: [wordpress, demos]
+
+    - name: Deploy Monitoring Stack (Prometheus & Grafana)
+      include_tasks: demos/monitoring-demo.yml
+      tags: [monitoring, demos]
+
+    - name: Deploy Kubernetes Dashboard
+      include_tasks: demos/dashboard-demo.yml
+      tags: [dashboard, demos]
+
+    - name: Display all demo access information
+      debug:
+        msg: |
+          🎉 All K3s demos have been deployed successfully!
+          
+          📋 To see all LoadBalancer services:
+          kubectl get svc --all-namespaces | grep LoadBalancer
+          
+          📊 To check deployment status:
+          ansible-playbook -i inventories/home/hosts.ini playbooks/demo-status.yml --become --ask-become-pass
+          
+          🧹 To clean up all demos:
+          ansible-playbook -i inventories/home/hosts.ini playbooks/demo-cleanup.yml --become --ask-become-pass

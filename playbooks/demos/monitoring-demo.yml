@@ -1,0 +1,87 @@
+---
+- name: Deploy Monitoring Stack (Prometheus & Grafana)
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('file', '../k8s/demos/monitoring/monitoring-demo.yaml') | from_yaml_all | list }}"
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+
+- name: Wait for Prometheus deployment to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: prometheus
+    namespace: monitoring
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 600
+
+- name: Wait for Grafana deployment to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: grafana
+    namespace: monitoring
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 600
+
+- name: Wait for Prometheus LoadBalancer IP assignment
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Service
+    name: prometheus
+    namespace: monitoring
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  register: prometheus_service
+  until: prometheus_service.resources[0].status.loadBalancer.ingress[0].ip is defined
+  retries: 60
+  delay: 5
+
+- name: Wait for Grafana LoadBalancer IP assignment
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Service
+    name: grafana
+    namespace: monitoring
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  register: grafana_service
+  until: grafana_service.resources[0].status.loadBalancer.ingress[0].ip is defined
+  retries: 60
+  delay: 5
+
+- name: Display Monitoring Stack access information
+  debug:
+    msg: |
+      📊 Monitoring Stack (Prometheus & Grafana) deployed successfully!
+      
+      📝 What it demonstrates:
+        ✅ Time-series metrics collection
+        ✅ Data visualization and dashboards
+        ✅ Persistent metrics storage
+        ✅ Multi-component monitoring stack
+        ✅ Service discovery and scraping
+      
+      📊 Access URLs:
+        📈 Prometheus: http://{{ prometheus_service.resources[0].status.loadBalancer.ingress[0].ip }}:9090
+        📊 Grafana: http://{{ grafana_service.resources[0].status.loadBalancer.ingress[0].ip }}:3000
+      
+      🔑 Grafana Login:
+        Username: admin
+        Password: admin123
+      
+      📈 Getting Started with Grafana:
+        1. Visit the Grafana URL
+        2. Login with admin/admin123
+        3. Add Prometheus as data source: http://prometheus:9090
+        4. Import dashboards or create your own
+        5. Monitor your K3s cluster metrics!
+      
+      🔍 Verify with:
+        kubectl get pods -n monitoring
+        kubectl get pvc -n monitoring

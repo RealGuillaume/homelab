@@ -1,0 +1,75 @@
+---
+- name: Deploy Browser Games Demo
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('file', '../k8s/demos/games/games-demo.yaml') | from_yaml_all | list }}"
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+
+- name: Wait for 2048 game deployment to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: game-2048
+    namespace: games
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 300
+
+- name: Wait for Tetris game deployment to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: tetris
+    namespace: games
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 300
+
+- name: Wait for 2048 game LoadBalancer IP assignment
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Service
+    name: game-2048
+    namespace: games
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  register: game2048_service
+  until: game2048_service.resources[0].status.loadBalancer.ingress[0].ip is defined
+  retries: 60
+  delay: 5
+
+- name: Wait for Tetris game LoadBalancer IP assignment
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Service
+    name: tetris
+    namespace: games
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  register: tetris_service
+  until: tetris_service.resources[0].status.loadBalancer.ingress[0].ip is defined
+  retries: 60
+  delay: 5
+
+- name: Display Games demo access information
+  debug:
+    msg: |
+      🎮 Browser Games Demo deployed successfully!
+      
+      📝 What it demonstrates:
+        ✅ Lightweight containerized applications
+        ✅ Multiple services in one namespace
+        ✅ Resource limits and requests
+        ✅ Browser-based applications
+      
+      🎮 Game Access URLs:
+        🔢 2048 Game: http://{{ game2048_service.resources[0].status.loadBalancer.ingress[0].ip }}
+        🧩 Tetris Game: http://{{ tetris_service.resources[0].status.loadBalancer.ingress[0].ip }}
+      
+      🔍 Verify with:
+        kubectl get pods -n games
+        kubectl get svc -n games

@@ -1,0 +1,48 @@
+---
+- name: Deploy NGINX LoadBalancer Demo
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('file', '../k8s/demos/nginx/nginx-demo.yaml') | from_yaml_all | list }}"
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+
+- name: Wait for NGINX deployment to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: nginx
+    namespace: nginx-demo
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 300
+
+- name: Wait for NGINX LoadBalancer IP assignment
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Service
+    name: nginx-lb
+    namespace: nginx-demo
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  register: nginx_service
+  until: nginx_service.resources[0].status.loadBalancer.ingress[0].ip is defined
+  retries: 60
+  delay: 5
+
+- name: Display NGINX demo access information
+  debug:
+    msg: |
+      🌐 NGINX LoadBalancer Demo deployed successfully!
+      
+      📝 What it demonstrates:
+        ✅ MetalLB LoadBalancer service
+        ✅ NGINX with 3 replicas
+        ✅ ConfigMap for custom HTML
+        ✅ Load balancing across pods
+      
+      🌐 Access URL: http://{{ nginx_service.resources[0].status.loadBalancer.ingress[0].ip }}
+      
+      🔍 Verify with:
+        kubectl get pods -n nginx-demo
+        kubectl get svc -n nginx-demo

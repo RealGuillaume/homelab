@@ -1,0 +1,89 @@
+---
+- name: Check Status of All Demo Applications
+  hosts: k3s_server
+  become: yes
+  gather_facts: no
+  tasks:
+    - name: Get all LoadBalancer services
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Service
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+      register: all_services
+
+    - name: Get all deployments across demo namespaces
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+      register: all_deployments
+
+    - name: Get all persistent volume claims
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: PersistentVolumeClaim
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+      register: all_pvcs
+
+    - name: Filter demo LoadBalancer services
+      set_fact:
+        demo_services: "{{ all_services.resources | selectattr('spec.type', 'equalto', 'LoadBalancer') | selectattr('metadata.namespace', 'in', ['nginx-demo', 'games', 'wordpress', 'monitoring', 'kubernetes-dashboard', 'demo']) | list }}"
+
+    - name: Filter demo deployments
+      set_fact:
+        demo_deployments: "{{ all_deployments.resources | selectattr('metadata.namespace', 'in', ['nginx-demo', 'games', 'wordpress', 'monitoring', 'kubernetes-dashboard', 'demo']) | list }}"
+
+    - name: Filter demo PVCs
+      set_fact:
+        demo_pvcs: "{{ all_pvcs.resources | selectattr('metadata.namespace', 'in', ['nginx-demo', 'games', 'wordpress', 'monitoring', 'kubernetes-dashboard', 'demo']) | list }}"
+
+    - name: Display demo services status
+      debug:
+        msg: |
+          📊 K3S DEMO APPLICATIONS STATUS
+          ================================
+          
+          🌐 LoadBalancer Services:
+          {% for svc in demo_services %}
+          {% if svc.status.loadBalancer.ingress is defined %}
+          ✅ {{ svc.metadata.namespace }}/{{ svc.metadata.name }}: http://{{ svc.status.loadBalancer.ingress[0].ip }}{% if svc.spec.ports[0].port != 80 %}:{{ svc.spec.ports[0].port }}{% endif %}
+          {% else %}
+          ⏳ {{ svc.metadata.namespace }}/{{ svc.metadata.name }}: Waiting for IP...
+          {% endif %}
+          {% endfor %}
+          
+          🚀 Deployment Status:
+          {% for deploy in demo_deployments %}
+          {% if deploy.status.readyReplicas is defined and deploy.status.readyReplicas == deploy.spec.replicas %}
+          ✅ {{ deploy.metadata.namespace }}/{{ deploy.metadata.name }}: {{ deploy.status.readyReplicas }}/{{ deploy.spec.replicas }} ready
+          {% else %}
+          ⏳ {{ deploy.metadata.namespace }}/{{ deploy.metadata.name }}: {{ deploy.status.readyReplicas | default(0) }}/{{ deploy.spec.replicas }} ready
+          {% endif %}
+          {% endfor %}
+          
+          💾 Persistent Storage:
+          {% for pvc in demo_pvcs %}
+          {% if pvc.status.phase == 'Bound' %}
+          ✅ {{ pvc.metadata.namespace }}/{{ pvc.metadata.name }}: {{ pvc.status.capacity.storage }} ({{ pvc.status.phase }})
+          {% else %}
+          ⏳ {{ pvc.metadata.namespace }}/{{ pvc.metadata.name }}: {{ pvc.status.phase }}
+          {% endif %}
+          {% endfor %}
+
+    - name: Show quick access commands
+      debug:
+        msg: |
+          🔧 QUICK ACCESS COMMANDS:
+          =======================
+          
+          📋 List all demo resources:
+            kubectl get all -n nginx-demo,games,wordpress,monitoring,kubernetes-dashboard,demo
+          
+          📊 Monitor resource usage:
+            kubectl top pods --all-namespaces
+          
+          🗂️  View logs:
+            kubectl logs -n <namespace> deployment/<deployment-name>
+          
+          🧹 Clean up all demos:
+            ansible-playbook -i inventories/home/hosts.ini playbooks/demo-cleanup.yml --become --ask-become-pass

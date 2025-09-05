@@ -1,0 +1,73 @@
+---
+- name: Deploy Kubernetes Dashboard
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('file', '../k8s/demos/dashboard/dashboard-demo.yaml') | from_yaml_all | list }}"
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+
+- name: Wait for Kubernetes Dashboard deployment to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: kubernetes-dashboard
+    namespace: kubernetes-dashboard
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 600
+
+- name: Wait for Dashboard LoadBalancer IP assignment
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Service
+    name: kubernetes-dashboard
+    namespace: kubernetes-dashboard
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  register: dashboard_service
+  until: dashboard_service.resources[0].status.loadBalancer.ingress[0].ip is defined
+  retries: 60
+  delay: 5
+
+- name: Generate admin user token for dashboard access
+  shell: kubectl -n kubernetes-dashboard create token admin-user
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  register: dashboard_token
+
+- name: Display Kubernetes Dashboard access information
+  debug:
+    msg: |
+      🎛️  Kubernetes Dashboard deployed successfully!
+      
+      📝 What it demonstrates:
+        ✅ RBAC (Role-Based Access Control)
+        ✅ HTTPS/TLS services
+        ✅ ServiceAccount token authentication
+        ✅ Web-based cluster management
+        ✅ Resource visualization and management
+      
+      🌐 Dashboard URL: https://{{ dashboard_service.resources[0].status.loadBalancer.ingress[0].ip }}
+      
+      🔐 Authentication:
+        1. Visit the URL above (ignore SSL certificate warning)
+        2. Select "Token" authentication method
+        3. Use this admin token:
+           {{ dashboard_token.stdout }}
+      
+      🎛️  Dashboard Features:
+        • View and manage all cluster resources
+        • Monitor pod logs and resource usage  
+        • Deploy applications via web UI
+        • Manage RBAC and configurations
+        • Scale deployments and services
+      
+      ⚠️  Security Note:
+        This admin token has full cluster access. In production:
+        - Use more restrictive RBAC policies
+        - Enable proper TLS certificates
+        - Implement audit logging
+      
+      🔍 Verify with:
+        kubectl get pods -n kubernetes-dashboard

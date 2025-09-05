@@ -1,0 +1,108 @@
+---
+- name: Clean Up All Demo Applications
+  hosts: k3s_server
+  become: yes
+  gather_facts: no
+  tasks:
+    - name: Confirm cleanup operation
+      pause:
+        prompt: |
+          
+          🧹 This will remove ALL demo applications and their data!
+          
+          The following namespaces and resources will be deleted:
+            • nginx-demo (NGINX LoadBalancer Demo)
+            • games (2048 & Tetris Games)  
+            • wordpress (WordPress + MySQL + data)
+            • monitoring (Prometheus + Grafana + metrics data)
+            • kubernetes-dashboard (Dashboard + RBAC)
+          
+          ⚠️  WARNING: This will permanently delete:
+            - All demo applications
+            - All persistent volume data (WordPress content, Grafana dashboards, etc.)
+            - All configuration and secrets
+          
+          Press Enter to continue or Ctrl+C to abort...
+
+    - name: Delete demo namespaces
+      kubernetes.core.k8s:
+        name: "{{ item }}"
+        api_version: v1
+        kind: Namespace
+        state: absent
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        wait: true
+        wait_timeout: 300
+      loop:
+        - nginx-demo
+        - games
+        - wordpress
+        - monitoring
+        - kubernetes-dashboard
+      register: cleanup_results
+
+    - name: Wait for namespace deletion to complete
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Namespace
+        name: "{{ item }}"
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+      register: namespace_check
+      until: namespace_check.resources | length == 0
+      retries: 30
+      delay: 10
+      loop:
+        - nginx-demo
+        - games
+        - wordpress
+        - monitoring
+        - kubernetes-dashboard
+      failed_when: false
+
+    - name: Check for remaining demo resources
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Service
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+      register: remaining_services
+
+    - name: Display cleanup results
+      debug:
+        msg: |
+          🧹 DEMO CLEANUP COMPLETED
+          ========================
+          
+          ✅ Deleted Namespaces:
+          {% for result in cleanup_results.results %}
+          {% if result.changed %}
+            • {{ result.item }}
+          {% endif %}
+          {% endfor %}
+          
+          💾 Persistent Volume Cleanup:
+            Local-path volumes are automatically cleaned up with namespace deletion
+          
+          🔍 Verify cleanup:
+            kubectl get namespaces | grep -E "(nginx-demo|games|wordpress|monitoring|kubernetes-dashboard)"
+            kubectl get pv | grep -E "(nginx-demo|games|wordpress|monitoring|kubernetes-dashboard)"
+          
+          🌐 LoadBalancer IPs Released:
+            The MetalLB IPs used by demos are now available for reuse
+          
+          ✅ Your cluster is now clean and ready for new deployments!
+
+    - name: Show deployment commands for reference  
+      debug:
+        msg: |
+          🚀 TO REDEPLOY DEMOS:
+          ====================
+          
+          Deploy all demos:
+            ansible-playbook -i inventories/home/hosts.ini playbooks/demos.yml --become --ask-become-pass
+          
+          Deploy individual demos:
+            ansible-playbook -i inventories/home/hosts.ini playbooks/demos/nginx-demo.yml --become --ask-become-pass
+            ansible-playbook -i inventories/home/hosts.ini playbooks/demos/games-demo.yml --become --ask-become-pass
+            ansible-playbook -i inventories/home/hosts.ini playbooks/demos/wordpress-demo.yml --become --ask-become-pass
+            ansible-playbook -i inventories/home/hosts.ini playbooks/demos/monitoring-demo.yml --become --ask-become-pass
+            ansible-playbook -i inventories/home/hosts.ini playbooks/demos/dashboard-demo.yml --become --ask-become-pass

@@ -1,0 +1,71 @@
+---
+- name: Deploy WordPress with MySQL Demo
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('file', '../k8s/demos/wordpress/wordpress-demo.yaml') | from_yaml_all | list }}"
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+
+- name: Wait for MySQL deployment to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: wordpress-mysql
+    namespace: wordpress
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 600
+
+- name: Wait for WordPress deployment to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: wordpress
+    namespace: wordpress
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 600
+
+- name: Wait for WordPress LoadBalancer IP assignment
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Service
+    name: wordpress
+    namespace: wordpress
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  register: wordpress_service
+  until: wordpress_service.resources[0].status.loadBalancer.ingress[0].ip is defined
+  retries: 60
+  delay: 5
+
+- name: Display WordPress demo access information
+  debug:
+    msg: |
+      📝 WordPress with MySQL Demo deployed successfully!
+      
+      📝 What it demonstrates:
+        ✅ Multi-tier application architecture
+        ✅ Persistent volume storage (local-path)
+        ✅ Database connectivity
+        ✅ Secrets management
+        ✅ Production-ready CMS deployment
+      
+      🌐 WordPress URL: http://{{ wordpress_service.resources[0].status.loadBalancer.ingress[0].ip }}
+      
+      📋 Initial Setup:
+        1. Visit the URL above
+        2. Complete WordPress installation wizard
+        3. Choose your language and create admin user
+        4. Start building your site!
+      
+      💾 Data Persistence:
+        Your content is stored in persistent volumes and will survive pod restarts
+      
+      🔍 Verify with:
+        kubectl get pods -n wordpress
+        kubectl get pvc -n wordpress
