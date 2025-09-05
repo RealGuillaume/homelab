@@ -1,0 +1,77 @@
+---
+- name: Check if cert-manager is already installed
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: cert-manager
+    namespace: cert-manager
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  register: cert_manager_deployment
+  failed_when: false
+
+- name: Apply cert-manager CRDs
+  kubernetes.core.k8s:
+    state: present
+    src: "https://github.com/cert-manager/cert-manager/releases/download/{{ cert_manager_version }}/cert-manager.crds.yaml"
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  when: cert_manager_deployment.resources | length == 0
+
+- name: Apply cert-manager manifests
+  kubernetes.core.k8s:
+    state: present
+    src: "https://github.com/cert-manager/cert-manager/releases/download/{{ cert_manager_version }}/cert-manager.yaml"
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  when: cert_manager_deployment.resources | length == 0
+
+- name: Wait for cert-manager webhook
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: cert-manager-webhook
+    namespace: cert-manager
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  register: webhook_deployment
+  until: webhook_deployment.resources[0].status.readyReplicas | default(0) > 0
+  retries: 60
+  delay: 5
+
+- name: Wait for cert-manager controller
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: cert-manager
+    namespace: cert-manager
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  register: controller_deployment
+  until: controller_deployment.resources[0].status.readyReplicas | default(0) > 0
+  retries: 60
+  delay: 5
+
+- name: Wait for cert-manager cainjector
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: cert-manager-cainjector
+    namespace: cert-manager
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  register: cainjector_deployment
+  until: cainjector_deployment.resources[0].status.readyReplicas | default(0) > 0
+  retries: 60
+  delay: 5
+
+- name: Wait for CRDs to be established
+  pause:
+    seconds: 10
+
+- name: Create ClusterIssuer for CA
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: cert-manager.io/v1
+      kind: ClusterIssuer
+      metadata:
+        name: ca-issuer
+      spec:
+        ca:
+          secretName: ca-key-pair
+    kubeconfig: /etc/rancher/k3s/k3s.yaml

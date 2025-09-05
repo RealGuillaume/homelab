@@ -1,0 +1,91 @@
+---
+- name: Install openssl
+  apt:
+    name: openssl
+    state: present
+
+- name: Create CA directory
+  file:
+    path: /root/ca
+    state: directory
+    mode: '0700'
+
+- name: Generate CA private key
+  openssl_privatekey:
+    path: /root/ca/ca.key
+    size: 4096
+
+- name: Generate CA certificate signing request
+  openssl_csr:
+    path: /root/ca/ca.csr
+    privatekey_path: /root/ca/ca.key
+    common_name: "{{ ca_common_name }}"
+    country_name: "{{ ca_country }}"
+    state_or_province_name: "{{ ca_state }}"
+    locality_name: "{{ ca_locality }}"
+    organization_name: "{{ ca_organization }}"
+    organizational_unit_name: "{{ ca_organizational_unit }}"
+    email_address: "{{ ca_email }}"
+    basic_constraints:
+      - CA:TRUE
+    basic_constraints_critical: yes
+    key_usage:
+      - keyCertSign
+      - cRLSign
+      - digitalSignature
+    key_usage_critical: yes
+
+- name: Generate self-signed CA certificate
+  openssl_certificate:
+    path: /root/ca/ca.crt
+    privatekey_path: /root/ca/ca.key
+    csr_path: /root/ca/ca.csr
+    provider: selfsigned
+    selfsigned_not_after: +3650d
+
+- name: Create local CA directory
+  delegate_to: localhost
+  become: no
+  file:
+    path: ~/home-cluster-ca
+    state: directory
+    mode: '0755'
+
+- name: Fetch CA certificate to local
+  fetch:
+    src: /root/ca/ca.crt
+    dest: ~/home-cluster-ca/ca.crt
+    flat: yes
+
+- name: Create cert-manager namespace
+  kubernetes.core.k8s:
+    name: cert-manager
+    api_version: v1
+    kind: Namespace
+    state: present
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+
+- name: Read CA certificate
+  slurp:
+    src: /root/ca/ca.crt
+  register: ca_cert
+
+- name: Read CA key
+  slurp:
+    src: /root/ca/ca.key
+  register: ca_key
+
+- name: Create CA secret for cert-manager
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: ca-key-pair
+        namespace: cert-manager
+      type: kubernetes.io/tls
+      data:
+        tls.crt: "{{ ca_cert.content }}"
+        tls.key: "{{ ca_key.content }}"
+    kubeconfig: /etc/rancher/k3s/k3s.yaml

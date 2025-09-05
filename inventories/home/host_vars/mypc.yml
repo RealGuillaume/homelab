@@ -1,0 +1,6 @@
+---
+k3s_role: server
+node_labels:
+  - role=server
+  - role=compute
+  - role=storage

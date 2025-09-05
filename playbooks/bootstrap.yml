@@ -1,0 +1,10 @@
+---
+- name: Bootstrap Home Cluster
+  hosts: k3s
+  become: yes
+  gather_facts: yes
+  roles:
+    - common
+    - k3s
+    - ca_trust
+    - cert_manager

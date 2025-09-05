@@ -1,0 +1,33 @@
+---
+- name: Deploy Demo Applications
+  hosts: k3s_server
+  become: yes
+  gather_facts: no
+  tasks:
+    - name: Ensure demo namespace exists
+      kubernetes.core.k8s:
+        name: demo
+        api_version: v1
+        kind: Namespace
+        state: present
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+
+    - name: Deploy code-server demo application
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('file', '../k8s/demo/code-server.yaml') | from_yaml_all | list }}"
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+
+    - name: Wait for code-server deployment
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        name: code-server
+        namespace: demo
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        wait: true
+        wait_condition:
+          type: Progressing
+          status: "True"
+          reason: NewReplicaSetAvailable
+        wait_timeout: 300

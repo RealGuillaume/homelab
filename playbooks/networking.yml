@@ -1,0 +1,7 @@
+---
+- name: Configure Cluster Networking
+  hosts: k3s_server
+  become: yes
+  gather_facts: yes
+  roles:
+    - metallb

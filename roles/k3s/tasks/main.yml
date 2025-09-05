@@ -1,0 +1,80 @@
+---
+- name: Check if k3s is already installed
+  stat:
+    path: /usr/local/bin/k3s
+  register: k3s_installed
+
+- name: Download k3s installer
+  get_url:
+    url: https://get.k3s.io
+    dest: /tmp/k3s-install.sh
+    mode: '0755'
+  when: not k3s_installed.stat.exists
+
+- name: Install k3s server
+  shell: |
+    INSTALL_K3S_VERSION="{{ k3s_version }}" \
+    INSTALL_K3S_EXEC="server --disable servicelb --write-kubeconfig-mode 644" \
+    K3S_TOKEN="{{ k3s_token }}" \
+    K3S_KUBECONFIG_MODE="644" \
+    sh /tmp/k3s-install.sh
+  when: not k3s_installed.stat.exists and k3s_role == 'server'
+
+- name: Wait for k3s to be ready
+  wait_for:
+    path: /etc/rancher/k3s/k3s.yaml
+    state: present
+    timeout: 60
+  when: k3s_role == 'server'
+
+- name: Install kubectl
+  get_url:
+    url: "https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl"
+    dest: /usr/local/bin/kubectl
+    mode: '0755'
+
+- name: Create kubectl config directory
+  file:
+    path: /root/.kube
+    state: directory
+    mode: '0755'
+
+- name: Copy kubeconfig
+  copy:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: /root/.kube/config
+    remote_src: yes
+    mode: '0600'
+  when: k3s_role == 'server'
+
+- name: Install pip kubernetes module
+  pip:
+    name:
+      - kubernetes
+      - pyyaml
+    state: present
+
+- name: Wait for node to be ready
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Node
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  register: node_info
+  until: node_info.resources[0].status.conditions | selectattr('type', 'equalto', 'Ready') | map(attribute='status') | first == 'True'
+  retries: 30
+  delay: 10
+  when: k3s_role == 'server'
+
+- name: Label node
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Node
+      metadata:
+        name: "{{ ansible_hostname }}"
+        labels: "{{ node_labels | items2dict(key_name='key', value_name='value') }}"
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  vars:
+    node_labels: "{{ node_labels | map('split', '=') | map('list') | list | map('reverse') | list | map('reverse') | list | map('join', '=') | list | map('split', '=') | list }}"
+  when: k3s_role == 'server'

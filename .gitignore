@@ -1,0 +1,13 @@
+*.retry
+*.pyc
+__pycache__/
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+/tmp/
+/ansible_facts/
+.vagrant/
+*.log
