@@ -1,6 +1,6 @@
 ---
 k3s_role: server
 node_labels:
-  - role=server
-  - role=compute
-  - role=storage
+  - node-role.home.lab/server=true
+  - node-role.home.lab/compute=true
+  - node-role.home.lab/storage=true

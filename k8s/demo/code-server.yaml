@@ -42,7 +42,7 @@ spec:
         app: code-server
     spec:
       nodeSelector:
-        role: compute
+        node-role.home.lab/compute: "true"
       containers:
       - name: code-server
         image: codercom/code-server:4.96.2

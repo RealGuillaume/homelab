@@ -47,11 +47,11 @@
     mode: '0600'
   when: k3s_role == 'server'
 
-- name: Install pip kubernetes module
-  pip:
+- name: Install Python kubernetes module
+  apt:
     name:
-      - kubernetes
-      - pyyaml
+      - python3-kubernetes
+      - python3-yaml
     state: present
 
 - name: Wait for node to be ready
@@ -65,16 +65,20 @@
   delay: 10
   when: k3s_role == 'server'
 
-- name: Label node
-  kubernetes.core.k8s:
-    state: present
-    definition:
-      apiVersion: v1
-      kind: Node
-      metadata:
-        name: "{{ ansible_hostname }}"
-        labels: "{{ node_labels | items2dict(key_name='key', value_name='value') }}"
-    kubeconfig: /etc/rancher/k3s/k3s.yaml
-  vars:
-    node_labels: "{{ node_labels | map('split', '=') | map('list') | list | map('reverse') | list | map('reverse') | list | map('join', '=') | list | map('split', '=') | list }}"
+- name: Label node as server
+  command: kubectl label node {{ ansible_hostname | lower }} node-role.home.lab/server=true --overwrite
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  when: k3s_role == 'server'
+
+- name: Label node as compute
+  command: kubectl label node {{ ansible_hostname | lower }} node-role.home.lab/compute=true --overwrite
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  when: k3s_role == 'server'
+
+- name: Label node as storage
+  command: kubectl label node {{ ansible_hostname | lower }} node-role.home.lab/storage=true --overwrite
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   when: k3s_role == 'server'
