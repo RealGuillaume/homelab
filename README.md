@@ -241,14 +241,101 @@ ansible-playbook -i inventories/home/hosts.ini playbooks/demo-cleanup.yml --beco
 
 Your single-node K3s cluster demonstrates the same capabilities as enterprise Kubernetes distributions!
 
+## Home Lab Services
+
+Transform your cluster into a complete self-hosted home lab with popular services:
+
+### Deploy Complete Home Lab Suite
+```bash
+# Deploy all home lab services at once
+ansible-playbook -i inventories/home/hosts.ini playbooks/homelab/all-homelab.yml --become --ask-become-pass
+```
+
+### Individual Service Stacks
+
+#### 🎬 Media Stack
+```bash
+ansible-playbook -i inventories/home/hosts.ini playbooks/homelab/media-stack.yml --become --ask-become-pass
+```
+**Includes**: Plex, Radarr, Sonarr, qBittorrent+VPN, Overseerr, Prowlarr
+
+#### 🏠 Home Automation Stack  
+```bash
+ansible-playbook -i inventories/home/hosts.ini playbooks/homelab/home-automation.yml --become --ask-become-pass
+```
+**Includes**: Home Assistant, Grocy
+
+#### ☁️ Personal Cloud Stack
+```bash
+ansible-playbook -i inventories/home/hosts.ini playbooks/homelab/cloud-services.yml --become --ask-become-pass
+```
+**Includes**: Nextcloud, Immich (photos), Mealie (recipes)
+
+### Service Overview
+
+| Service | URL | Purpose | Port |
+|---------|-----|---------|------|
+| **Plex** | https://plex.home.lab | Media streaming server | 32400 |
+| **Radarr** | https://radarr.home.lab | Movie collection manager | 7878 |
+| **Sonarr** | https://sonarr.home.lab | TV show manager | 8989 |
+| **qBittorrent** | https://qbittorrent.home.lab | Torrent client + Mullvad VPN | 8080 |
+| **Overseerr** | https://overseerr.home.lab | Media request portal | 5055 |
+| **Prowlarr** | https://prowlarr.home.lab | Indexer manager | 9696 |
+| **Home Assistant** | https://hass.home.lab | Smart home hub | 8123 |
+| **Grocy** | https://grocy.home.lab | Household ERP | 9283 |
+| **Nextcloud** | https://nextcloud.home.lab | Personal cloud | 80 |
+| **Immich** | https://immich.home.lab | Photo backup (Google Photos alternative) | 2283 |
+| **Mealie** | https://mealie.home.lab | Recipe manager | 9000 |
+
+### Prerequisites for Home Lab Services
+
+1. **Configure VPN Credentials** (for qBittorrent):
+   ```bash
+   # Edit the Mullvad secret in k8s/homelab/media/qbittorrent-vpn.yaml
+   # Add your WireGuard private key and configuration
+   ```
+
+2. **DNS Configuration**:
+   - Set up DNS entries for `*.home.lab` domains
+   - Or add entries to `/etc/hosts` for each service
+
+3. **Plex Setup**:
+   - Get a Plex claim token from https://plex.tv/claim
+   - Update the PLEX_CLAIM environment variable
+
+### What Your Home Lab Provides
+
+🎬 **Complete Media Center**:
+- Automated movie/TV downloading and organization  
+- Secure torrenting through VPN
+- Beautiful media streaming interface
+- Request system for family members
+
+🏠 **Smart Home Hub**:
+- Device automation and control
+- Household inventory management
+- Grocery and meal planning
+
+☁️ **Personal Cloud Services**:
+- File sync and sharing (Dropbox alternative)
+- Photo backup with AI features (Google Photos alternative)  
+- Recipe collection and meal planning
+- Collaborative office suite
+
+🔒 **Enterprise Security Features**:
+- VPN protection for sensitive traffic
+- TLS encryption for all web interfaces
+- Persistent encrypted storage
+- Network segmentation and isolation
+
 ## Next Steps
 
-- Add monitoring (built into demos above)
-- Configure persistent storage (NFS, Longhorn, or Rook-Ceph)
-- Set up GitOps with ArgoCD or Flux
-- Add backup solution (Velero)
-- Implement network policies
-- Add additional nodes for HA
+- Configure external storage (NFS, Longhorn, or Rook-Ceph) for larger media libraries
+- Set up automated backups with Velero  
+- Add monitoring stack (already included in demos)
+- Implement GitOps with ArgoCD or Flux
+- Add network policies for enhanced security
+- Scale to multiple nodes for high availability
 
 ## License
 

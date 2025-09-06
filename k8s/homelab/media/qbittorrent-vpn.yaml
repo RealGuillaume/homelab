@@ -1,0 +1,216 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mullvad-config
+  namespace: media
+type: Opaque
+stringData:
+  # Add your Mullvad credentials here
+  VPN_SERVICE_PROVIDER: "mullvad"
+  VPN_TYPE: "wireguard"
+  WIREGUARD_PRIVATE_KEY: "YOUR_PRIVATE_KEY_HERE"
+  WIREGUARD_ADDRESSES: "10.x.x.x/32"  # Your Mullvad IP
+  SERVER_COUNTRIES: "Sweden"  # Or your preferred country
+  FIREWALL: "on"
+  DOT: "off"
+  # Port forwarding (requires compatible servers)
+  VPN_PORT_FORWARDING: "on"
+  VPN_PORT_FORWARDING_PROVIDER: "mullvad"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qbittorrent-config
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qbittorrent-downloads
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qbittorrent-vpn
+  namespace: media
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qbittorrent-vpn
+  template:
+    metadata:
+      labels:
+        app: qbittorrent-vpn
+    spec:
+      nodeSelector:
+        node-role.home.lab/storage: "true"
+      containers:
+      # VPN Sidecar Container
+      - name: gluetun
+        image: qmcgaw/gluetun:latest
+        securityContext:
+          capabilities:
+            add:
+              - NET_ADMIN
+        ports:
+        - containerPort: 8080
+          name: qbittorrent
+        - containerPort: 8888
+          name: gluetun-http
+        env:
+        - name: VPN_SERVICE_PROVIDER
+          valueFrom:
+            secretKeyRef:
+              name: mullvad-config
+              key: VPN_SERVICE_PROVIDER
+        - name: VPN_TYPE
+          valueFrom:
+            secretKeyRef:
+              name: mullvad-config
+              key: VPN_TYPE
+        - name: WIREGUARD_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: mullvad-config
+              key: WIREGUARD_PRIVATE_KEY
+        - name: WIREGUARD_ADDRESSES
+          valueFrom:
+            secretKeyRef:
+              name: mullvad-config
+              key: WIREGUARD_ADDRESSES
+        - name: SERVER_COUNTRIES
+          valueFrom:
+            secretKeyRef:
+              name: mullvad-config
+              key: SERVER_COUNTRIES
+        - name: FIREWALL
+          valueFrom:
+            secretKeyRef:
+              name: mullvad-config
+              key: FIREWALL
+        - name: VPN_PORT_FORWARDING
+          valueFrom:
+            secretKeyRef:
+              name: mullvad-config
+              key: VPN_PORT_FORWARDING
+        - name: VPN_PORT_FORWARDING_PROVIDER
+          valueFrom:
+            secretKeyRef:
+              name: mullvad-config
+              key: VPN_PORT_FORWARDING_PROVIDER
+        - name: HEALTH_VPN_DURATION_INITIAL
+          value: "30s"
+        - name: HEALTH_SUCCESS_WAIT_DURATION
+          value: "5s"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"
+
+      # qBittorrent Container
+      - name: qbittorrent
+        image: linuxserver/qbittorrent:latest
+        env:
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
+        - name: TZ
+          value: "America/Toronto"
+        - name: WEBUI_PORT
+          value: "8080"
+        - name: UMASK
+          value: "002"
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: downloads
+          mountPath: /downloads
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "2Gi"
+            cpu: "1"
+        # Use gluetun's network
+        network: none
+        depends_on:
+          - gluetun
+
+      volumes:
+      - name: config
+        persistentVolumeClaim:
+          claimName: qbittorrent-config
+      - name: downloads
+        persistentVolumeClaim:
+          claimName: qbittorrent-downloads
+      
+      # Share network namespace with gluetun
+      shareProcessNamespace: true
+      dnsPolicy: "None"
+      dnsConfig:
+        nameservers:
+        - "1.1.1.1"
+        - "8.8.8.8"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qbittorrent
+  namespace: media
+spec:
+  type: LoadBalancer
+  selector:
+    app: qbittorrent-vpn
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: webui
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: qbittorrent
+  namespace: media
+  annotations:
+    cert-manager.io/cluster-issuer: "ca-issuer"
+    # Add basic auth for security
+    traefik.ingress.kubernetes.io/router.middlewares: media-qbittorrent-auth@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - qbittorrent.home.lab
+    secretName: qbittorrent-tls
+  rules:
+  - host: qbittorrent.home.lab
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: qbittorrent
+            port:
+              number: 8080

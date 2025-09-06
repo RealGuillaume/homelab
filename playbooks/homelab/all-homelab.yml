@@ -1,0 +1,71 @@
+---
+- name: Deploy Complete Home Lab Suite
+  hosts: k3s_server
+  become: yes
+  gather_facts: no
+  tasks:
+    - name: Deploy Media Stack
+      include_tasks: media-stack.yml
+
+    - name: Deploy Home Automation Stack  
+      include_tasks: home-automation.yml
+
+    - name: Deploy Cloud Services Stack
+      include_tasks: cloud-services.yml
+
+    - name: Display complete homelab summary
+      debug:
+        msg: |
+          🏠🎬☁️  COMPLETE HOME LAB DEPLOYED!
+          ====================================
+          
+          🎯 YOUR HOME LAB NOW INCLUDES:
+          
+          📺 MEDIA SERVICES:
+          • Plex: https://plex.home.lab (Media streaming)
+          • Radarr: https://radarr.home.lab (Movie management) 
+          • Sonarr: https://sonarr.home.lab (TV show management)
+          • qBittorrent: https://qbittorrent.home.lab (Downloads + VPN)
+          • Overseerr: https://overseerr.home.lab (Request portal)
+          • Prowlarr: https://prowlarr.home.lab (Indexer manager)
+          
+          🏠 HOME AUTOMATION:
+          • Home Assistant: https://hass.home.lab (Smart home hub)
+          • Grocy: https://grocy.home.lab (Household ERP)
+          
+          ☁️  PERSONAL CLOUD:
+          • Nextcloud: https://nextcloud.home.lab (File sync & office)
+          • Immich: https://immich.home.lab (Photo backup)
+          • Mealie: https://mealie.home.lab (Recipe manager)
+          
+          🔧 NEXT STEPS:
+          ==============
+          1. Configure /etc/hosts or DNS for *.home.lab domains
+          2. Trust your internal CA certificate
+          3. Configure Mullvad VPN credentials for qBittorrent
+          4. Set up Plex claim token for remote access
+          5. Connect services (Overseerr→Plex, Prowlarr→*arr apps)
+          
+          📊 MONITORING YOUR HOMELAB:
+          kubectl get pods --all-namespaces
+          kubectl get pvc --all-namespaces  
+          kubectl get svc --all-namespaces | grep LoadBalancer
+          
+          🎉 Welcome to your self-hosted digital life!
+          
+          Your K3s cluster now provides enterprise-grade services for:
+          ✅ Media streaming and management
+          ✅ Smart home automation  
+          ✅ Personal cloud storage
+          ✅ Photo backup and organization
+          ✅ Recipe and household management
+          ✅ Secure torrenting with VPN
+          
+          Total Services Deployed: 11 applications + 4 databases
+          Namespaces: media, home-automation, cloud-services
+          
+          🔒 Security Features:
+          • VPN protection for torrenting
+          • TLS certificates for all services
+          • Persistent data storage
+          • Resource limits and isolation
