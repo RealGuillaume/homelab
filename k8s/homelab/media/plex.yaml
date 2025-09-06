@@ -24,7 +24,7 @@ metadata:
   namespace: media
 spec:
   accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
   storageClassName: local-path
   resources:
     requests:
@@ -63,7 +63,7 @@ spec:
         - name: VERSION
           value: "docker"
         - name: PLEX_CLAIM
-          value: "" # Add your Plex claim token here
+          value: "claim-N_WA5R1myboYxhNhSKZW"
         volumeMounts:
         - name: config
           mountPath: /config

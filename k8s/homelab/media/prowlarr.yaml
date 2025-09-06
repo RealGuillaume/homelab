@@ -1,5 +1,15 @@
 ---
 apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: media-api-keys
+  namespace: media
+data:
+  radarr-api-key: "fa15aa8c601345308478b355e0fe9079"
+  sonarr-api-key: "fc32a82594b0416d8e2cf8cb14729265"
+  prowlarr-api-key: ""
+---
+apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: prowlarr-config
@@ -29,6 +39,13 @@ spec:
     spec:
       nodeSelector:
         node-role.home.lab/compute: "true"
+      initContainers:
+      - name: create-config
+        image: busybox:latest
+        command: ['sh', '-c', 'mkdir -p /config && chown -R 1000:1000 /config']
+        volumeMounts:
+        - name: config
+          mountPath: /config
       containers:
       - name: prowlarr
         image: linuxserver/prowlarr:latest

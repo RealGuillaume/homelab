@@ -7,19 +7,19 @@
     - name: Deploy Nextcloud with MariaDB
       kubernetes.core.k8s:
         state: present
-        definition: "{{ lookup('file', '../k8s/homelab/cloud-services/nextcloud.yaml') | from_yaml_all | list }}"
+        definition: "{{ lookup('file', '../../k8s/homelab/cloud-services/nextcloud.yaml') | from_yaml_all | list }}"
         kubeconfig: /etc/rancher/k3s/k3s.yaml
 
     - name: Deploy Immich with PostgreSQL and Redis
       kubernetes.core.k8s:
         state: present
-        definition: "{{ lookup('file', '../k8s/homelab/cloud-services/immich.yaml') | from_yaml_all | list }}"
+        definition: "{{ lookup('file', '../../k8s/homelab/cloud-services/immich.yaml') | from_yaml_all | list }}"
         kubeconfig: /etc/rancher/k3s/k3s.yaml
 
     - name: Deploy Mealie
       kubernetes.core.k8s:
         state: present
-        definition: "{{ lookup('file', '../k8s/homelab/cloud-services/mealie.yaml') | from_yaml_all | list }}"
+        definition: "{{ lookup('file', '../../k8s/homelab/cloud-services/mealie.yaml') | from_yaml_all | list }}"
         kubeconfig: /etc/rancher/k3s/k3s.yaml
 
     - name: Wait for database deployments to be ready

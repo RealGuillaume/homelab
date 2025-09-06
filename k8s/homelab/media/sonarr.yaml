@@ -29,6 +29,15 @@ spec:
     spec:
       nodeSelector:
         node-role.home.lab/storage: "true"
+      initContainers:
+      - name: create-folders
+        image: busybox:latest
+        command: ['sh', '-c', 'mkdir -p /media/tv /downloads && chown -R 1000:1000 /media /downloads']
+        volumeMounts:
+        - name: media
+          mountPath: /media
+        - name: downloads
+          mountPath: /downloads
       containers:
       - name: sonarr
         image: linuxserver/sonarr:latest

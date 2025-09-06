@@ -1,0 +1,94 @@
+---
+- name: Deploy Home Assistant
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('file', '../../k8s/homelab/home-automation/home-assistant.yaml') | from_yaml_all | list }}"
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+
+- name: Deploy Grocy
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('file', '../../k8s/homelab/home-automation/grocy.yaml') | from_yaml_all | list }}"
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+
+- name: Wait for home automation deployments to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: "{{ item }}"
+    namespace: home-automation
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 600
+  loop:
+    - home-assistant
+    - grocy
+
+- name: Get home automation services LoadBalancer IPs
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Service
+    namespace: home-automation
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  register: automation_services
+
+- name: Display home automation stack access information
+  debug:
+    msg: |
+      🏠 HOME AUTOMATION STACK DEPLOYED!
+      ==================================
+      
+      📱 Services Available:
+      {% for svc in automation_services.resources %}
+      {% if svc.spec.type == "LoadBalancer" and svc.status.loadBalancer.ingress is defined %}
+      🔗 {{ svc.metadata.name | title | replace('-', ' ') }}: http://{{ svc.status.loadBalancer.ingress[0].ip }}{% if svc.spec.ports[0].port != 80 %}:{{ svc.spec.ports[0].port }}{% endif %}
+        🌐 Web: https://{% if svc.metadata.name == 'home-assistant' %}hass{% else %}{{ svc.metadata.name }}{% endif %}.home.lab
+      {% endif %}
+      {% endfor %}
+      
+      📋 SETUP INSTRUCTIONS:
+      ======================
+      
+      🏠 HOME ASSISTANT:
+      • Access: https://hass.home.lab or LoadBalancer IP:8123
+      • Complete initial setup wizard
+      • Create admin account
+      • Connect smart home devices
+      • Install HACS for additional integrations
+      • Configure automations and scenes
+      
+      Features:
+      ✅ Device discovery on host network
+      ✅ Persistent configuration storage
+      ✅ SSL/TLS via cert-manager
+      ✅ WebSocket support for real-time updates
+      
+      📊 GROCY (ERP for Your Home):
+      • Access: https://grocy.home.lab or LoadBalancer IP:9283
+      • Default login: admin / admin (change immediately!)
+      • Manage groceries, recipes, and household items
+      • Track expiration dates and shopping lists
+      • Inventory management for your home
+      
+      Features:
+      ✅ Grocery management with barcode scanning
+      ✅ Recipe database with meal planning
+      ✅ Stock management and shopping lists
+      ✅ Persistent data storage
+      
+      🔧 Advanced Configuration:
+      =========================
+      
+      Home Assistant Add-ons to consider:
+      • ESPHome (for custom IoT devices)
+      • Node-RED (visual automation)
+      • Zigbee2MQTT (Zigbee device integration)
+      • AdGuard Home (network-wide ad blocking)
+      
+      🔍 Monitoring Commands:
+        kubectl get pods -n home-automation
+        kubectl logs -n home-automation deployment/home-assistant
+        kubectl exec -n home-automation deployment/home-assistant -- cat /config/home-assistant.log

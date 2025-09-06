@@ -7,37 +7,37 @@
     - name: Deploy Media Namespace and Plex
       kubernetes.core.k8s:
         state: present
-        definition: "{{ lookup('file', '../k8s/homelab/media/plex.yaml') | from_yaml_all | list }}"
+        definition: "{{ lookup('file', '../../k8s/homelab/media/plex.yaml') | from_yaml_all | list }}"
         kubeconfig: /etc/rancher/k3s/k3s.yaml
 
     - name: Deploy Radarr
       kubernetes.core.k8s:
         state: present
-        definition: "{{ lookup('file', '../k8s/homelab/media/radarr.yaml') | from_yaml_all | list }}"
+        definition: "{{ lookup('file', '../../k8s/homelab/media/radarr.yaml') | from_yaml_all | list }}"
         kubeconfig: /etc/rancher/k3s/k3s.yaml
 
     - name: Deploy Sonarr
       kubernetes.core.k8s:
         state: present
-        definition: "{{ lookup('file', '../k8s/homelab/media/sonarr.yaml') | from_yaml_all | list }}"
+        definition: "{{ lookup('file', '../../k8s/homelab/media/sonarr.yaml') | from_yaml_all | list }}"
         kubeconfig: /etc/rancher/k3s/k3s.yaml
 
     - name: Deploy qBittorrent with VPN
       kubernetes.core.k8s:
         state: present
-        definition: "{{ lookup('file', '../k8s/homelab/media/qbittorrent-vpn.yaml') | from_yaml_all | list }}"
+        definition: "{{ lookup('file', '../../k8s/homelab/media/qbittorrent-vpn.yaml') | from_yaml_all | list }}"
         kubeconfig: /etc/rancher/k3s/k3s.yaml
 
     - name: Deploy Overseerr
       kubernetes.core.k8s:
         state: present
-        definition: "{{ lookup('file', '../k8s/homelab/media/overseerr.yaml') | from_yaml_all | list }}"
+        definition: "{{ lookup('file', '../../k8s/homelab/media/overseerr.yaml') | from_yaml_all | list }}"
         kubeconfig: /etc/rancher/k3s/k3s.yaml
 
     - name: Deploy Prowlarr
       kubernetes.core.k8s:
         state: present
-        definition: "{{ lookup('file', '../k8s/homelab/media/prowlarr.yaml') | from_yaml_all | list }}"
+        definition: "{{ lookup('file', '../../k8s/homelab/media/prowlarr.yaml') | from_yaml_all | list }}"
         kubeconfig: /etc/rancher/k3s/k3s.yaml
 
     - name: Wait for media deployments to be ready

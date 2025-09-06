@@ -1,6 +1,6 @@
-# Home Cluster MVP - Single Node K3s Setup
+# 🏠 Kubernetes Home Lab
 
-A production-ready single-node Kubernetes cluster for home lab environments with MetalLB load balancing, cert-manager for TLS, and a demo code-server application.
+A complete Kubernetes-based home media server and automation setup using K3s, deployed with Ansible automation.
 
 ## Architecture Overview
 

@@ -1,0 +1,130 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: overseerr-auto-config
+  namespace: media
+data:
+  auto-config.sh: |
+    #!/bin/sh
+    echo "Starting Overseerr auto-configuration..."
+    
+    # Wait for Overseerr to be ready
+    echo "Waiting for Overseerr to start..."
+    sleep 45
+    
+    # Wait for Overseerr API to be available
+    until curl -s http://localhost:5055/api/v1/status > /dev/null; do
+      echo "Waiting for Overseerr API..."
+      sleep 5
+    done
+    
+    echo "Overseerr API is ready, starting configuration..."
+    
+    # Extract API keys from other services
+    RADARR_API_KEY="fa15aa8c601345308478b355e0fe9079"
+    SONARR_API_KEY="fc32a82594b0416d8e2cf8cb14729265"
+    
+    echo "Using Radarr API Key: $RADARR_API_KEY"
+    echo "Using Sonarr API Key: $SONARR_API_KEY"
+    
+    # Configure Plex
+    echo "Configuring Plex connection..."
+    curl -X POST http://localhost:5055/api/v1/settings/plex \
+      -H "Content-Type: application/json" \
+      -d '{
+        "ip": "plex.media.svc.cluster.local",
+        "port": 32400,
+        "useSsl": false,
+        "libraries": [],
+        "machineId": "",
+        "name": "Plex"
+      }' || echo "Plex configuration failed"
+    
+    # Configure Radarr
+    echo "Configuring Radarr connection..."
+    curl -X POST http://localhost:5055/api/v1/settings/radarr \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "Radarr",
+        "hostname": "radarr.media.svc.cluster.local",
+        "port": 7878,
+        "apiKey": "'$RADARR_API_KEY'",
+        "useSsl": false,
+        "baseUrl": "",
+        "activeProfileId": 1,
+        "activeProfileName": "Any",
+        "activeDirectory": "/media/movies",
+        "is4k": false,
+        "minimumAvailability": "released",
+        "isDefault": true,
+        "externalUrl": "",
+        "syncEnabled": true,
+        "preventSearch": false
+      }' || echo "Radarr configuration failed"
+    
+    # Configure Sonarr
+    echo "Configuring Sonarr connection..."
+    curl -X POST http://localhost:5055/api/v1/settings/sonarr \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "Sonarr",
+        "hostname": "sonarr.media.svc.cluster.local", 
+        "port": 8989,
+        "apiKey": "'$SONARR_API_KEY'",
+        "useSsl": false,
+        "baseUrl": "",
+        "activeProfileId": 1,
+        "activeProfileName": "Any",
+        "activeDirectory": "/media/tv",
+        "activeLanguageProfileId": 1,
+        "activeAnimeProfileId": null,
+        "activeAnimeDirectory": "",
+        "activeAnimeLanguageProfileId": null,
+        "enableSeasonFolders": true,
+        "isDefault": true,
+        "externalUrl": "",
+        "syncEnabled": true,
+        "preventSearch": false
+      }' || echo "Sonarr configuration failed"
+    
+    # Test connections
+    echo "Testing service connections..."
+    curl -s http://localhost:5055/api/v1/settings/plex/test > /dev/null && echo "✓ Plex connection successful" || echo "✗ Plex connection failed"
+    curl -s http://localhost:5055/api/v1/settings/radarr/test > /dev/null && echo "✓ Radarr connection successful" || echo "✗ Radarr connection failed"  
+    curl -s http://localhost:5055/api/v1/settings/sonarr/test > /dev/null && echo "✓ Sonarr connection successful" || echo "✗ Sonarr connection failed"
+    
+    echo "Overseerr auto-configuration completed!"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: overseerr-config
+  namespace: media
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: media
+  name: pod-exec
+rules:
+- apiGroups: [""]
+  resources: ["pods", "pods/exec"]
+  verbs: ["get", "list", "create"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: overseerr-pod-exec
+  namespace: media
+subjects:
+- kind: ServiceAccount
+  name: overseerr-config
+  namespace: media
+roleRef:
+  kind: Role
+  name: pod-exec
+  apiGroup: rbac.authorization.k8s.io

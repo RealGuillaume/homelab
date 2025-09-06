@@ -1,0 +1,143 @@
+---
+- name: Deploy Nextcloud with MariaDB
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('file', '../../k8s/homelab/cloud-services/nextcloud.yaml') | from_yaml_all | list }}"
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+
+- name: Deploy Immich with PostgreSQL and Redis
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('file', '../../k8s/homelab/cloud-services/immich.yaml') | from_yaml_all | list }}"
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+
+- name: Deploy Mealie
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('file', '../../k8s/homelab/cloud-services/mealie.yaml') | from_yaml_all | list }}"
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+
+- name: Wait for database deployments to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: "{{ item }}"
+    namespace: cloud-services
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 600
+  loop:
+    - nextcloud-db
+    - immich-postgres
+    - immich-redis
+
+- name: Wait for application deployments to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: "{{ item }}"
+    namespace: cloud-services
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 900  # Longer timeout for app initialization
+  loop:
+    - nextcloud
+    - immich-server
+    - mealie
+
+- name: Get cloud services LoadBalancer IPs
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Service
+    namespace: cloud-services
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  register: cloud_services
+
+- name: Display cloud services stack access information
+  debug:
+    msg: |
+      ☁️  CLOUD SERVICES STACK DEPLOYED!
+      ===================================
+      
+      🌐 Services Available:
+      {% for svc in cloud_services.resources %}
+      {% if svc.spec.type == "LoadBalancer" and svc.status.loadBalancer.ingress is defined %}
+      🔗 {{ svc.metadata.name | title | replace('-server', '') }}: http://{{ svc.status.loadBalancer.ingress[0].ip }}{% if svc.spec.ports[0].port != 80 %}:{{ svc.spec.ports[0].port }}{% endif %}
+        🌐 Web: https://{{ svc.metadata.name | replace('-server', '') }}.home.lab
+      {% endif %}
+      {% endfor %}
+      
+      📋 SETUP INSTRUCTIONS:
+      ======================
+      
+      ☁️  NEXTCLOUD (Personal Cloud):
+      • Access: https://nextcloud.home.lab
+      • Login: admin / adminpassword123
+      • Complete setup wizard if prompted
+      • Install recommended apps (Calendar, Contacts, Talk)
+      • Configure external storage if needed
+      • Enable two-factor authentication
+      
+      Features:
+      ✅ File sync and sharing
+      ✅ Calendar and contacts
+      ✅ Office suite integration
+      ✅ Video calls and chat
+      ✅ Collaborative editing
+      
+      📸 IMMICH (Photo Backup - Google Photos Alternative):
+      • Access: https://immich.home.lab
+      • Create admin account on first visit
+      • Download mobile app for automatic photo backup
+      • Configure facial recognition and object detection
+      • Set up sharing albums with family/friends
+      
+      Features:
+      ✅ Automatic photo/video backup from mobile
+      ✅ AI-powered search and recognition
+      ✅ Timeline view like Google Photos
+      ✅ Face detection and clustering
+      ✅ Shared albums and collaboration
+      
+      🍳 MEALIE (Recipe Manager & Meal Planner):
+      • Access: https://mealie.home.lab
+      • Create account (signup enabled)
+      • Import recipes from URLs
+      • Plan meals and generate shopping lists
+      • Share recipes with family
+      
+      Features:
+      ✅ Recipe import from websites
+      ✅ Meal planning calendar
+      ✅ Shopping list generation
+      ✅ Nutritional information
+      ✅ Recipe scaling and conversion
+      
+      📊 DATABASE INFORMATION:
+      =======================
+      • Nextcloud: MariaDB (persistent storage)
+      • Immich: PostgreSQL + Redis cache
+      • Mealie: SQLite (embedded)
+      
+      All services include:
+      ✅ Persistent data storage
+      ✅ SSL/TLS certificates
+      ✅ Automatic backups via persistent volumes
+      
+      🔧 Maintenance Commands:
+        kubectl get pods -n cloud-services
+        kubectl get pvc -n cloud-services
+        kubectl logs -n cloud-services deployment/nextcloud
+        kubectl logs -n cloud-services deployment/immich-server
+      
+      💡 Pro Tips:
+      • Set up regular backups of persistent volumes
+      • Monitor disk usage - photos/videos can consume significant space
+      • Configure Nextcloud cron jobs for better performance
+      • Enable Immich machine learning features for enhanced search

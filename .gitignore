@@ -1,13 +1,46 @@
+# Ansible files
 *.retry
 *.pyc
 __pycache__/
+/ansible_facts/
+.vagrant/
+
+# Secrets and sensitive data
+**/secrets/
+**/*-secret.yaml
+**/*-token.yaml
+**/cloudflared.yaml
+roles/cloudflare/vars/main.yml
+k8s/cloudflare/
+
+# VPN configs with sensitive keys
+k8s/homelab/media/qbittorrent-vpn.yaml
+**/*vpn*.yaml
+
+# Files with passwords/secrets
+k8s/homelab/cloud-services/nextcloud.yaml
+k8s/homelab/cloud-services/immich.yaml
+
+# Local overrides and personal configs
+*.local.yml
+*.override.yml
+*.local.yaml
+*.override.yaml
+inventories/*/host_vars/
+inventories/*/group_vars/vault.yml
+
+# Environment files
+.env
+.env.local
+
+# IDE files
 .DS_Store
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-/tmp/
-/ansible_facts/
-.vagrant/
+
+# Logs and temporary files
 *.log
+/tmp/

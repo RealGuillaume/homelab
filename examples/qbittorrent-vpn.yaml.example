@@ -1,0 +1,24 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vpn-config
+  namespace: media
+type: Opaque
+stringData:
+  # VPN configuration - replace with your provider's settings
+  VPN_SERVICE_PROVIDER: "custom"
+  VPN_TYPE: "wireguard"
+  WIREGUARD_PRIVATE_KEY: "YOUR_PRIVATE_KEY_HERE"
+  WIREGUARD_ADDRESSES: "YOUR_VPN_IP/32"
+  WIREGUARD_PUBLIC_KEY: "YOUR_PUBLIC_KEY_HERE"
+  WIREGUARD_PRESHARED_KEY: "YOUR_PRESHARED_KEY_HERE"
+  WIREGUARD_ENDPOINT_IP: "YOUR_VPN_ENDPOINT_IP"
+  WIREGUARD_ENDPOINT_PORT: "YOUR_VPN_PORT"
+  FIREWALL: "on"
+  DOT: "off"
+  VPN_PORT_FORWARDING: "off"
+  FIREWALL_VPN_INPUT_PORTS: "YOUR_FORWARDED_PORT"
+---
+# Rest of the qBittorrent deployment configuration...
+# See the actual deployment file for complete configuration

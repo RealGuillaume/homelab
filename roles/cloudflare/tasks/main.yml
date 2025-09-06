@@ -1,0 +1,40 @@
+---
+- name: Create cloudflare namespace
+  kubernetes.core.k8s:
+    name: cloudflare
+    api_version: v1
+    kind: Namespace
+    state: present
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+
+- name: Create cloudflared token secret
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: cloudflared-token
+        namespace: cloudflare
+      type: Opaque
+      stringData:
+        token: "{{ cloudflare_tunnel_token }}"
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+
+- name: Apply cloudflared configuration
+  kubernetes.core.k8s:
+    state: present
+    src: "{{ playbook_dir }}/../k8s/cloudflare/cloudflared.yaml"
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+
+- name: Wait for cloudflared deployment
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: cloudflared
+    namespace: cloudflare
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  register: cloudflared_deployment
+  until: cloudflared_deployment.resources[0].status.readyReplicas | default(0) > 0
+  retries: 60
+  delay: 5

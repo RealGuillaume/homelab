@@ -5,13 +5,13 @@
   gather_facts: no
   tasks:
     - name: Deploy Media Stack
-      include_tasks: media-stack.yml
+      include_tasks: tasks/media-stack-tasks.yml
 
     - name: Deploy Home Automation Stack  
-      include_tasks: home-automation.yml
+      include_tasks: tasks/home-automation-tasks.yml
 
     - name: Deploy Cloud Services Stack
-      include_tasks: cloud-services.yml
+      include_tasks: tasks/cloud-services-tasks.yml
 
     - name: Display complete homelab summary
       debug:

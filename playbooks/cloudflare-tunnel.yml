@@ -1,0 +1,7 @@
+---
+- name: Deploy Cloudflare Tunnel
+  hosts: k3s_server
+  become: yes
+  gather_facts: yes
+  roles:
+    - cloudflare

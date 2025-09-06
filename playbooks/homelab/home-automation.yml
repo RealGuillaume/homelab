@@ -7,13 +7,13 @@
     - name: Deploy Home Assistant
       kubernetes.core.k8s:
         state: present
-        definition: "{{ lookup('file', '../k8s/homelab/home-automation/home-assistant.yaml') | from_yaml_all | list }}"
+        definition: "{{ lookup('file', '../../k8s/homelab/home-automation/home-assistant.yaml') | from_yaml_all | list }}"
         kubeconfig: /etc/rancher/k3s/k3s.yaml
 
     - name: Deploy Grocy
       kubernetes.core.k8s:
         state: present
-        definition: "{{ lookup('file', '../k8s/homelab/home-automation/grocy.yaml') | from_yaml_all | list }}"
+        definition: "{{ lookup('file', '../../k8s/homelab/home-automation/grocy.yaml') | from_yaml_all | list }}"
         kubeconfig: /etc/rancher/k3s/k3s.yaml
 
     - name: Wait for home automation deployments to be ready
