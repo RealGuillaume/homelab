@@ -1,0 +1,66 @@
+---
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install graphviz (required for KubeDiagrams)
+  apt:
+    name: graphviz
+    state: present
+
+- name: Install pipx (for isolated Python package installation)
+  apt:
+    name: pipx
+    state: present
+
+- name: Ensure pipx is properly configured
+  shell: pipx ensurepath
+  become: yes
+  become_user: root
+  changed_when: false
+
+- name: Install KubeDiagrams from PyPI using pipx
+  community.general.pipx:
+    name: KubeDiagrams
+    state: present
+
+- name: Verify KubeDiagrams installation
+  shell: |
+    export PATH="$PATH:/root/.local/bin"
+    kube-diagrams --help
+  register: kubediagrams_help
+  changed_when: false
+
+- name: Display KubeDiagrams version info
+  debug:
+    msg: "KubeDiagrams installed successfully"
+  when: kubediagrams_help.rc == 0
+
+- name: Create diagrams output directory
+  file:
+    path: "{{ kubediagrams_output_dir }}"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Copy diagram generation script
+  template:
+    src: generate-diagrams.sh.j2
+    dest: /usr/local/bin/generate-k8s-diagrams
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Install KubeDiagrams as kubectl plugin
+  copy:
+    content: |
+      #!/bin/bash
+      export PATH="$PATH:/root/.local/bin"
+      kube-diagrams "$@"
+    dest: /usr/local/bin/kubectl-diagrams
+    mode: '0755'
+    owner: root
+    group: root
+  when: kubediagrams_kubectl_plugin | default(true)

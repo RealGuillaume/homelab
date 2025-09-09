@@ -1,0 +1,22 @@
+---
+# Default variables for KubeDiagrams role
+kubediagrams_output_dir: /root/k8s-diagrams
+kubediagrams_kubectl_plugin: true
+kubediagrams_generate_examples: true
+
+# Common diagram formats
+kubediagrams_default_format: png
+kubediagrams_formats:
+  - png
+  - svg
+  - pdf
+
+# Namespaces to generate diagrams for
+kubediagrams_namespaces:
+  - default
+  - kube-system
+  - metallb-system
+  - cert-manager
+  - media
+  - home-automation
+  - cloud-services

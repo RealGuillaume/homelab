@@ -121,7 +121,7 @@ metadata:
   namespace: cloud-services
 spec:
   accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
   storageClassName: local-path
   resources:
     requests:
@@ -172,11 +172,11 @@ spec:
         - name: NEXTCLOUD_ADMIN_PASSWORD
           value: "adminpassword123"
         - name: NEXTCLOUD_TRUSTED_DOMAINS
-          value: "nextcloud.home.lab"
+          value: "nextcloud.home.lab nextcloud.guidelajunglehomelab.casa"
         - name: OVERWRITEPROTOCOL
           value: "https"
         - name: OVERWRITEHOST
-          value: "nextcloud.home.lab"
+          value: "nextcloud.guidelajunglehomelab.casa"
         volumeMounts:
         - name: app-data
           mountPath: /var/www/html

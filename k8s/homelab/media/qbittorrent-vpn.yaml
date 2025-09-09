@@ -2,21 +2,72 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  name: mullvad-config
+  name: airvpn-config
   namespace: media
 type: Opaque
 stringData:
-  # Add your Mullvad credentials here
-  VPN_SERVICE_PROVIDER: "mullvad"
+  # AirVPN native provider - required variables only
+  VPN_SERVICE_PROVIDER: "airvpn"
   VPN_TYPE: "wireguard"
-  WIREGUARD_PRIVATE_KEY: "YOUR_PRIVATE_KEY_HERE"
-  WIREGUARD_ADDRESSES: "10.x.x.x/32"  # Your Mullvad IP
-  SERVER_COUNTRIES: "Sweden"  # Or your preferred country
+  WIREGUARD_PRIVATE_KEY: "6PPILvqyKKZsrJlCuhbA8fNCNjJnXYvEgbkefn3joGM="
+  WIREGUARD_PRESHARED_KEY: "wBgcWM8yENsysegPAL9/RKw4XWc93zVoYNT0Dn9pfjA="
+  WIREGUARD_ADDRESSES: "10.186.123.240/32,fd7d:76ee:e68f:a993:e2ea:da21:fba4:80f9/128"
+  # Optional settings to match your config
+  WIREGUARD_MTU: "1320"
   FIREWALL: "on"
   DOT: "off"
-  # Port forwarding (requires compatible servers)
-  VPN_PORT_FORWARDING: "on"
-  VPN_PORT_FORWARDING_PROVIDER: "mullvad"
+  # Disable automatic port forwarding for custom provider (AirVPN handles this)
+  VPN_PORT_FORWARDING: "off"
+  FIREWALL_VPN_INPUT_PORTS: "23059"
+  WIREGUARD_PERSISTENT_KEEPALIVE: "15"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: qbittorrent-config-template
+  namespace: media
+data:
+  qBittorrent.conf: |
+    [Application]
+    FileLogger\Enabled=true
+    FileLogger\MaxSizeBytes=66560
+    FileLogger\Path=/config/qBittorrent/data/logs
+
+    [BitTorrent]
+    Session\AddTorrentStopped=false
+    Session\DefaultSavePath=/downloads
+    Session\ExcludedFileNames=
+    Session\Interface=tun0
+    Session\InterfaceName=tun0
+    Session\Port=23059
+    Session\QueueingSystemEnabled=true
+    Session\SSL\Port=55745
+    Session\ShareLimitAction=Stop
+    Session\TempPath=/downloads/temp
+
+    [Core]
+    AutoDeleteAddedTorrentFile=Never
+
+    [Meta]
+    MigrationVersion=8
+
+    [Network]
+    Cookies=@Invalid()
+    Proxy\HostnameLookupEnabled=false
+    Proxy\Profiles\BitTorrent=true
+    Proxy\Profiles\Misc=true
+    Proxy\Profiles\RSS=true
+
+    [Preferences]
+    General\Locale=en
+    MailNotification\req_auth=true
+    WebUI\AuthSubnetWhitelist=10.42.0.0/16
+    WebUI\AuthSubnetWhitelistEnabled=true
+    WebUI\Port=8080
+
+    [RSS]
+    AutoDownloader\DownloadRepacks=true
+    AutoDownloader\SmartEpisodeFilter=s(\\d+)e(\\d+), (\\d+)x(\\d+), "(\\d{4}[.\\-]\\d{1,2}[.\\-]\\d{1,2})", "(\\d{1,2}[.\\-]\\d{1,2}[.\\-]\\d{4})"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -38,7 +89,7 @@ metadata:
   namespace: media
 spec:
   accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
   storageClassName: local-path
   resources:
     requests:
@@ -61,14 +112,39 @@ spec:
     spec:
       nodeSelector:
         node-role.home.lab/storage: "true"
+      initContainers:
+      # Initialize qBittorrent config with VPN interface binding
+      - name: config-init
+        image: busybox:latest
+        command: ['sh', '-c']
+        args:
+        - |
+          mkdir -p /config/qBittorrent/config
+          if [ ! -f /config/qBittorrent/config/qBittorrent.conf ]; then
+            echo "Copying initial config with VPN interface binding..."
+            cp /tmp/config-template/qBittorrent.conf /config/qBittorrent/config/qBittorrent.conf
+          else
+            echo "Config exists, checking for VPN interface binding..."
+            if ! grep -q "Session\\\\Interface=tun0" /config/qBittorrent/config/qBittorrent.conf; then
+              echo "Adding VPN interface binding to existing config..."
+              sed -i '/\[BitTorrent\]/a\Session\\Interface=tun0\nSession\\InterfaceName=tun0' /config/qBittorrent/config/qBittorrent.conf
+            fi
+          fi
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: config-template
+          mountPath: /tmp/config-template
       containers:
       # VPN Sidecar Container
       - name: gluetun
         image: qmcgaw/gluetun:latest
         securityContext:
+          privileged: true
           capabilities:
             add:
               - NET_ADMIN
+              - SYS_MODULE
         ports:
         - containerPort: 8080
           name: qbittorrent
@@ -78,43 +154,58 @@ spec:
         - name: VPN_SERVICE_PROVIDER
           valueFrom:
             secretKeyRef:
-              name: mullvad-config
+              name: airvpn-config
               key: VPN_SERVICE_PROVIDER
         - name: VPN_TYPE
           valueFrom:
             secretKeyRef:
-              name: mullvad-config
+              name: airvpn-config
               key: VPN_TYPE
         - name: WIREGUARD_PRIVATE_KEY
           valueFrom:
             secretKeyRef:
-              name: mullvad-config
+              name: airvpn-config
               key: WIREGUARD_PRIVATE_KEY
         - name: WIREGUARD_ADDRESSES
           valueFrom:
             secretKeyRef:
-              name: mullvad-config
+              name: airvpn-config
               key: WIREGUARD_ADDRESSES
-        - name: SERVER_COUNTRIES
+        - name: WIREGUARD_PUBLIC_KEY
           valueFrom:
             secretKeyRef:
-              name: mullvad-config
-              key: SERVER_COUNTRIES
+              name: airvpn-config
+              key: WIREGUARD_PUBLIC_KEY
+        - name: WIREGUARD_PRESHARED_KEY
+          valueFrom:
+            secretKeyRef:
+              name: airvpn-config
+              key: WIREGUARD_PRESHARED_KEY
+        - name: WIREGUARD_ENDPOINT_IP
+          valueFrom:
+            secretKeyRef:
+              name: airvpn-config
+              key: WIREGUARD_ENDPOINT_IP
+        - name: WIREGUARD_ENDPOINT_PORT
+          valueFrom:
+            secretKeyRef:
+              name: airvpn-config
+              key: WIREGUARD_ENDPOINT_PORT
+        - name: FIREWALL_VPN_INPUT_PORTS
+          valueFrom:
+            secretKeyRef:
+              name: airvpn-config
+              key: FIREWALL_VPN_INPUT_PORTS
         - name: FIREWALL
           valueFrom:
             secretKeyRef:
-              name: mullvad-config
+              name: airvpn-config
               key: FIREWALL
         - name: VPN_PORT_FORWARDING
           valueFrom:
             secretKeyRef:
-              name: mullvad-config
+              name: airvpn-config
               key: VPN_PORT_FORWARDING
-        - name: VPN_PORT_FORWARDING_PROVIDER
-          valueFrom:
-            secretKeyRef:
-              name: mullvad-config
-              key: VPN_PORT_FORWARDING_PROVIDER
         - name: HEALTH_VPN_DURATION_INITIAL
           value: "30s"
         - name: HEALTH_SUCCESS_WAIT_DURATION
@@ -129,18 +220,16 @@ spec:
 
       # qBittorrent Container
       - name: qbittorrent
-        image: linuxserver/qbittorrent:latest
+        image: qbittorrentofficial/qbittorrent-nox:latest
+        command: ["qbittorrent-nox"]
+        args: ["--webui-port=8080", "--profile=/config"]
         env:
-        - name: PUID
-          value: "1000"
-        - name: PGID
-          value: "1000"
+        - name: QBT_WEBUI_PORT
+          value: "8080"
+        - name: QBT_TORRENTING_PORT
+          value: "23059"
         - name: TZ
           value: "America/Toronto"
-        - name: WEBUI_PORT
-          value: "8080"
-        - name: UMASK
-          value: "002"
         volumeMounts:
         - name: config
           mountPath: /config
@@ -153,10 +242,7 @@ spec:
           limits:
             memory: "2Gi"
             cpu: "1"
-        # Use gluetun's network
-        network: none
-        depends_on:
-          - gluetun
+        # Shares pod network with gluetun automatically
 
       volumes:
       - name: config
@@ -165,6 +251,9 @@ spec:
       - name: downloads
         persistentVolumeClaim:
           claimName: qbittorrent-downloads
+      - name: config-template
+        configMap:
+          name: qbittorrent-config-template
       
       # Share network namespace with gluetun
       shareProcessNamespace: true

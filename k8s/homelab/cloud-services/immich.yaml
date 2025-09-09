@@ -46,7 +46,7 @@ spec:
         node-role.home.lab/storage: "true"
       containers:
       - name: postgres
-        image: postgres:14
+        image: tensorchord/pgvecto-rs:pg14-v0.2.0
         ports:
         - containerPort: 5432
         env:
@@ -137,6 +137,74 @@ spec:
   - port: 6379
     targetPort: 6379
 ---
+# Machine Learning Cache PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-ml-cache-pvc
+  namespace: cloud-services
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+---
+# Immich Machine Learning Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: immich-machine-learning
+  namespace: cloud-services
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: immich-machine-learning
+  template:
+    metadata:
+      labels:
+        app: immich-machine-learning
+    spec:
+      nodeSelector:
+        node-role.home.lab/compute: "true"
+      containers:
+      - name: immich-machine-learning
+        image: ghcr.io/immich-app/immich-machine-learning:release
+        ports:
+        - containerPort: 3003
+        env:
+        - name: TRANSFORMERS_CACHE
+          value: "/cache"
+        volumeMounts:
+        - name: ml-cache
+          mountPath: /cache
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "2Gi"
+            cpu: "1"
+      volumes:
+      - name: ml-cache
+        persistentVolumeClaim:
+          claimName: immich-ml-cache-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: immich-machine-learning
+  namespace: cloud-services
+spec:
+  selector:
+    app: immich-machine-learning
+  ports:
+  - port: 3003
+    targetPort: 3003
+    name: http
+---
 # Immich Server
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -145,7 +213,7 @@ metadata:
   namespace: cloud-services
 spec:
   accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
   storageClassName: local-path
   resources:
     requests:
@@ -172,7 +240,7 @@ spec:
       - name: immich-server
         image: ghcr.io/immich-app/immich-server:release
         ports:
-        - containerPort: 3001
+        - containerPort: 2283
         env:
         - name: DB_HOSTNAME
           value: "immich-postgres"
@@ -193,6 +261,8 @@ spec:
               key: DB_DATABASE_NAME
         - name: REDIS_HOSTNAME
           value: "immich-redis"
+        - name: MACHINE_LEARNING_URL
+          value: "http://immich-machine-learning:3003"
         - name: JWT_SECRET
           value: "my-immich-jwt-secret-change-this"
         - name: DISABLE_REVERSE_GEOCODING
@@ -223,7 +293,7 @@ spec:
     app: immich-server
   ports:
   - port: 2283
-    targetPort: 3001
+    targetPort: 2283
     name: http
 ---
 apiVersion: networking.k8s.io/v1

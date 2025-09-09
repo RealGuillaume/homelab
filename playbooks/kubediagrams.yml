@@ -1,0 +1,50 @@
+---
+- name: Install KubeDiagrams
+  hosts: k3s_server
+  become: yes
+  gather_facts: yes
+  
+  roles:
+    - kubediagrams
+
+  post_tasks:
+    - name: Display installation summary
+      debug:
+        msg: |
+          🎨 KUBEDIAGRAMS INSTALLED SUCCESSFULLY!
+          =======================================
+          
+          📊 WHAT'S BEEN INSTALLED:
+          • KubeDiagrams CLI tool
+          • Graphviz (for diagram generation)
+          • kubectl plugin (kubectl diagrams)
+          • Helper script: /usr/local/bin/generate-k8s-diagrams
+          
+          📁 OUTPUT DIRECTORY: {{ kubediagrams_output_dir }}
+          
+          🚀 QUICK START:
+          ================
+          # Generate diagram from manifest file
+          kube-diagrams -o diagram.png /path/to/manifest.yml
+          
+          # Generate diagram from live cluster
+          kubectl get all -o yaml | kube-diagrams -o cluster-overview.png -
+          
+          # Use kubectl plugin
+          kubectl diagrams -o homelab.png /root/k8s/homelab/
+          
+          # Use helper script
+          generate-k8s-diagrams
+          
+          🎯 GENERATE HOMELAB DIAGRAMS:
+          ============================
+          # Media stack
+          kubectl get all -n media -o yaml | kube-diagrams -o {{ kubediagrams_output_dir }}/media-stack.png -
+          
+          # Home automation
+          kubectl get all -n home-automation -o yaml | kube-diagrams -o {{ kubediagrams_output_dir }}/home-automation.png -
+          
+          # Cloud services
+          kubectl get all -n cloud-services -o yaml | kube-diagrams -o {{ kubediagrams_output_dir }}/cloud-services.png -
+          
+          📖 DOCUMENTATION: https://github.com/philippemerle/KubeDiagrams
