@@ -86,6 +86,71 @@ kubectl get volumes.longhorn.io -n longhorn-system -o wide
 kubectl describe volume <volume-name> -n longhorn-system
 ```
 
+### Scenario 1.1: Adding Replacement Node After Failure
+
+**What Happens When You Add a New Node:**
+```yaml
+# Current state after Node2 failure (replicas concentrated on 2 nodes):
+Node1: [Replica-A1] [Replica-B2] [Replica-C3] [Replica-C1-rebuilt] ← Overloaded
+Node3: [Replica-A3] [Replica-B1] [Replica-C2] [Replica-A2-rebuilt] [Replica-B3-rebuilt] ← Overloaded
+
+# Step 1: Add new Node4 to replace failed Node2
+Node4: [Empty] ← Fresh node joins cluster
+
+# Step 2: Longhorn detects new node (immediate)
+- Node4 appears in Longhorn node list
+- Marked as "Schedulable" automatically
+- Storage capacity added to pool
+
+# Step 3: Automatic rebalancing (gradual, based on settings)
+- With "replica-auto-balance" = "best-effort" (default):
+  * Existing replicas stay put (no unnecessary movement)
+  * NEW replicas will prefer Node4 (least loaded)
+  
+- With "replica-auto-balance" = "least-effort":
+  * Moves minimum replicas to achieve balance
+  * Example: Move 2 replicas to Node4
+  
+- With "replica-auto-balance" = "aggressive":
+  * Actively rebalances ALL replicas evenly
+  * Results in equal distribution
+
+# Final state after rebalancing:
+Node1: [Replica-A1] [Replica-B2] [Replica-C3]
+Node3: [Replica-A3] [Replica-B1] [Replica-C2]
+Node4: [Replica-A2-new] [Replica-B3-new] [Replica-C1-new] ← Balanced distribution
+```
+
+**The Rebalancing Process:**
+```bash
+# Configure auto-balance level (cluster-wide)
+kubectl edit settings.longhorn.io replica-auto-balance -n longhorn-system
+# Options: "disabled", "least-effort", "best-effort", "aggressive"
+
+# Per-volume override
+kubectl patch volume <volume-name> -n longhorn-system --type merge -p \
+  '{"spec":{"replicaAutoBalance":"aggressive"}}'
+
+# Monitor rebalancing progress
+watch -n 2 'kubectl get replicas.longhorn.io -n longhorn-system \
+  -o custom-columns=NAME:.metadata.name,NODE:.spec.nodeID,STATE:.status.currentState'
+
+# Force immediate rebalancing (if auto-balance is disabled)
+kubectl annotate volume <volume-name> -n longhorn-system \
+  longhorn.io/rebalance-replica="true"
+```
+
+**Timeline for New Node Integration:**
+```
+T+0s:   New node joins Kubernetes cluster
+T+10s:  Longhorn detects new node
+T+30s:  Node marked schedulable in Longhorn
+T+1m:   New volume creations use the new node
+T+5m:   Gradual rebalancing begins (if enabled)
+T+30m:  Most replicas balanced (depending on data size)
+T+1h:   Cluster fully balanced
+```
+
 ### Scenario 2: Drive Failure (Single Disk Loss)
 
 **What Happens:**
@@ -117,6 +182,60 @@ kubectl patch nodes.longhorn.io <node-name> -n longhorn-system --type='json' -p=
     "allowScheduling": true
   }}
 ]'
+```
+
+### Scenario 2.1: Adding Replacement Drive After Failure
+
+**What Happens When You Add a New Drive:**
+```yaml
+# Current state after drive failure (replicas squeezed onto remaining drives):
+Node1:
+  /var/lib/longhorn-ssd     ← Overloaded (contains A1, B1, C1-rebuilt, D1-rebuilt)
+  /var/lib/longhorn-hdd1    ← REMOVED (was failed)
+  /var/lib/longhorn-hdd2    ← Overloaded (contains E1, F1, G1)
+
+# Step 1: Add new drive to replace failed one
+Node1:
+  /var/lib/longhorn-ssd     ← Still overloaded
+  /var/lib/longhorn-hdd1    ← NEW DRIVE (empty)
+  /var/lib/longhorn-hdd2    ← Still overloaded
+
+# Step 2: Longhorn detects new disk (within seconds)
+- New disk appears in node's disk list
+- Marked as "Schedulable" 
+- Storage capacity updated
+
+# Step 3: Automatic redistribution based on disk pressure
+- Disk pressure = used space / total space
+- Longhorn prefers emptiest disk for new replicas
+- With auto-balance, actively moves replicas
+
+# Final state after rebalancing:
+Node1:
+  /var/lib/longhorn-ssd     ← Balanced (contains A1, B1)
+  /var/lib/longhorn-hdd1    ← Balanced (contains C1-new, D1-new, F1-moved)
+  /var/lib/longhorn-hdd2    ← Balanced (contains E1, G1)
+```
+
+**Smart Disk Selection:**
+```yaml
+# Longhorn's disk selection algorithm:
+1. Check disk tags (if specified)
+2. Check available space
+3. Check disk pressure (usage percentage)
+4. Check I/O load
+5. Prefer disk with:
+   - Matching tags
+   - Most free space
+   - Lowest pressure
+   - Least I/O load
+
+# Example: After adding SSD to node with HDDs
+Node1-Disks:
+  nvme0: 10% used, tag: "nvme"     ← Highest priority for new replicas
+  ssd1:  40% used, tag: "ssd"      ← Second priority
+  hdd1:  60% used, tag: "hdd"      ← Third priority
+  hdd2:  80% used, tag: "archive"  ← Lowest priority
 ```
 
 ### Scenario 3: Network Partition (Split Brain Prevention)
@@ -624,6 +743,78 @@ Node2: Add 2TB HDD
 # Result: 4TB usable (with 3x replication = 1.3TB effective)
 ```
 
+### Scenario: "Node/Drive Replacement and Recovery Patterns"
+
+**Pattern 1: Preventive Node Replacement (Planned)**
+```bash
+# You want to replace Node2 with better hardware
+# Current: 3 nodes, all healthy
+
+# Step 1: Add new node FIRST (now have 4 nodes)
+kubectl get nodes
+# node1  Ready
+# node2  Ready  ← To be replaced
+# node3  Ready
+# node4  Ready  ← New replacement
+
+# Step 2: Migrate replicas away from old node
+kubectl cordon node2
+kubectl patch nodes.longhorn.io node2 -n longhorn-system \
+  --type='merge' -p '{"spec":{"allowScheduling":false,"evictionRequested":true}}'
+
+# Step 3: Wait for migration (Longhorn moves replicas to node4)
+watch kubectl get replicas.longhorn.io -n longhorn-system \
+  --field-selector spec.nodeID=node2
+
+# Step 4: Remove old node
+kubectl drain node2 --ignore-daemonsets
+kubectl delete node node2
+
+# Result: Seamless transition with zero downtime
+```
+
+**Pattern 2: Emergency Recovery (Unplanned Failure)**
+```bash
+# Node2 suddenly dies (hardware failure)
+# Longhorn already rebuilt replicas on remaining nodes
+
+# Step 1: Add replacement node
+# New node4 joins cluster
+
+# Step 2: Longhorn automatically rebalances
+# Based on your replica-auto-balance setting:
+
+# Option A: "best-effort" (default)
+# - Existing replicas stay put
+# - New volumes prefer node4
+# - Gradual natural rebalancing
+
+# Option B: "aggressive"
+# - Immediately starts moving replicas
+# - Achieves perfect balance
+# - Higher network traffic during rebalance
+```
+
+**Pattern 3: Incremental Upgrades (Rolling Hardware Refresh)**
+```bash
+# Upgrading entire cluster from old hardware to new
+# WITHOUT any downtime or data loss
+
+Week 1: Add NewNode1 → 4 nodes total
+        Remove OldNode1 → Back to 3 nodes
+        
+Week 2: Add NewNode2 → 4 nodes total
+        Remove OldNode2 → Back to 3 nodes
+        
+Week 3: Add NewNode3 → 4 nodes total
+        Remove OldNode3 → Back to 3 nodes
+
+# Throughout this process:
+- Data continuously replicated
+- No service interruption
+- Automatic rebalancing
+```
+
 ### Scenario: "Migrating from Current Setup"
 
 ```bash
@@ -693,6 +884,118 @@ Long-term: Hours saved per week
 
 ---
 
+## How Longhorn Handles Node/Drive Addition After Recovery
+
+### The Double Recovery Pattern
+
+When you add replacement hardware after Longhorn has already recovered from a failure, you get a "double recovery" pattern:
+
+```yaml
+# Timeline of events:
+T+0:    Node2 fails (3 nodes → 2 nodes)
+T+30s:  Longhorn detects failure
+T+1m:   Begins rebuilding replicas on surviving nodes
+T+10m:  Recovery complete (all replicas rebuilt on 2 nodes)
+T+1day: You add replacement Node4
+T+1day+30s: Longhorn detects new node
+T+1day+5m:  Begins rebalancing to use new node
+
+# What happens to your data:
+1. First Recovery (immediate):
+   - Rebuilds missing replicas ASAP for data safety
+   - May concentrate replicas on remaining nodes
+   - Priority: Data durability over balance
+
+2. Second Recovery (when you add hardware):
+   - Rebalances replicas for optimal distribution
+   - Reduces load on previously overworked nodes
+   - Priority: Performance and balance
+```
+
+### Automatic Rebalancing Strategies
+
+**Configuration Options:**
+```bash
+# Global setting (applies to all volumes)
+kubectl edit settings.longhorn.io replica-auto-balance -n longhorn-system
+
+# Options explained:
+"disabled"      → Manual control only
+"least-effort"  → Move minimum replicas needed
+"best-effort"   → Balance when convenient (default)
+"aggressive"    → Actively pursue perfect balance
+```
+
+**What Each Setting Does When Adding Nodes/Drives:**
+
+```yaml
+# "disabled" - Nothing automatic happens
+Before: Node1[5 replicas] Node2[5 replicas] Node3[0 replicas-new]
+After:  Node1[5 replicas] Node2[5 replicas] Node3[0 replicas-still empty]
+Action: Must manually trigger rebalance
+
+# "least-effort" - Minimal movement
+Before: Node1[5 replicas] Node2[5 replicas] Node3[0 replicas-new]
+After:  Node1[4 replicas] Node2[4 replicas] Node3[2 replicas]
+Action: Moves just enough to relieve pressure
+
+# "best-effort" - Gradual natural balance
+Before: Node1[5 replicas] Node2[5 replicas] Node3[0 replicas-new]
+After:  Node1[5 replicas] Node2[5 replicas] Node3[new replicas go here]
+Action: Existing stay, new volumes prefer empty node
+
+# "aggressive" - Active rebalancing
+Before: Node1[5 replicas] Node2[5 replicas] Node3[0 replicas-new]
+After:  Node1[3 replicas] Node2[3 replicas] Node3[4 replicas]
+Action: Actively moves replicas to achieve balance
+```
+
+### Real Example: Your 298GB Migration Scenario
+
+```bash
+# Your current setup:
+Single Node: 298GB data on /mnt/k3s-storage
+
+# After migrating to 3-node Longhorn cluster:
+Node1: 298GB (replica 1)
+Node2: 298GB (replica 2)  
+Node3: 298GB (replica 3)
+
+# If Node2 fails:
+Node1: 298GB (replica 1) + rebuilding replica 2 → ~600GB
+Node3: 298GB (replica 3)
+
+# When you add Node4 to replace Node2:
+- With "best-effort": 
+  Node1 keeps 600GB until you create new volumes
+  Node4 gets new volume replicas
+  
+- With "aggressive":
+  Node1: 298GB (replica 1)
+  Node3: 298GB (replica 3)
+  Node4: 298GB (replica 2 moved here)
+```
+
+### Monitoring Rebalancing Progress
+
+```bash
+# Watch replica distribution
+watch -n 5 'kubectl get nodes.longhorn.io -n longhorn-system -o custom-columns=\
+NODE:.metadata.name,\
+REPLICAS:.status.replicaCount,\
+DISK_USAGE:.status.diskStatus.*.storageScheduled'
+
+# Check if rebalancing is happening
+kubectl get replicas.longhorn.io -n longhorn-system -o wide | grep -E "rebuilding|starting"
+
+# Force rebalance specific volume
+kubectl annotate volume plex-media -n longhorn-system \
+  longhorn.io/rebalance-replica="true" --overwrite
+
+# View rebalancing metrics
+curl -s http://localhost:9500/metrics | grep longhorn_volume_replica_count
+```
+
 ## Summary
 
 Longhorn transforms your fragile single-node storage into an enterprise-grade distributed storage system that:
@@ -703,5 +1006,8 @@ Longhorn transforms your fragile single-node storage into an enterprise-grade di
 4. **Protects data** - Snapshots, backups, encryption
 5. **Optimizes performance** - Data locality, disk selection, caching
 6. **Simplifies operations** - No more manual PVC directory management
+7. **Handles replacements intelligently** - Automatic rebalancing when you add new hardware
 
 For your home lab with media servers, personal cloud storage, and home automation, Longhorn provides the storage resilience of enterprise solutions at zero licensing cost, turning your collection of old computers into a robust storage cluster.
+
+**Key Takeaway:** When you add replacement nodes/drives after a failure, Longhorn automatically detects them and rebalances based on your settings. You don't need to manually move data - Longhorn handles the "double recovery" pattern automatically, first ensuring data safety, then optimizing distribution when new resources become available.
